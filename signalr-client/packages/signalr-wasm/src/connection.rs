@@ -1,8 +1,8 @@
 use crate::log::*;
 use futures::Future;
-use std::cell::Cell;
 use std::cell::RefCell;
 use std::cell::RefMut;
+use std::cell::{Cell, OnceCell};
 use std::convert::TryInto;
 use std::fmt;
 use std::num::Saturating;
@@ -61,7 +61,7 @@ pub struct HandshakeFuture {
     websocket: WebSocket,
     on_message: Closure<dyn FnMut(MessageEvent) -> ()>,
     status: Rc<RefCell<HandshakeStatus>>,
-    waker: Rc<RefCell<Option<Waker>>>,
+    waker: Rc<OnceCell<Waker>>,
 }
 
 impl HandshakeFuture {
@@ -69,11 +69,11 @@ impl HandshakeFuture {
         let status_rc = Rc::new(RefCell::new(HandshakeStatus::InProgress));
         let status_rc_clone = status_rc.clone();
 
-        let waker_rc = Rc::new(RefCell::new(None));
+        let waker_rc = Rc::new(OnceCell::new());
         let waker_rc_clone = waker_rc.clone();
 
         let on_message: Closure<dyn FnMut(_)> = Closure::new(move |e: MessageEvent| {
-            Self::on_message(e, status_rc_clone.borrow_mut(), waker_rc_clone.borrow_mut())
+            Self::on_message(e, status_rc_clone.borrow_mut(), waker_rc_clone.get())
         });
 
         websocket.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
@@ -86,11 +86,7 @@ impl HandshakeFuture {
         }
     }
 
-    fn on_message(
-        e: MessageEvent,
-        mut status: RefMut<HandshakeStatus>,
-        mut waker_opt: RefMut<Option<Waker>>,
-    ) {
+    fn on_message(e: MessageEvent, mut status: RefMut<HandshakeStatus>, waker_opt: Option<&Waker>) {
         if let Ok(_abuf) = e.data().dyn_into::<js_sys::ArrayBuffer>() {
             unimplemented!("Array buffers are not implemented");
         } else if let Ok(_blob) = e.data().dyn_into::<web_sys::Blob>() {
@@ -103,11 +99,9 @@ impl HandshakeFuture {
 
         *status = HandshakeStatus::Complete;
 
-        let waker = waker_opt.deref_mut();
-
-        if let Some(waker2) = waker {
+        if let Some(waker) = waker_opt {
             console_log!("Joe Biden wake up");
-            waker2.wake_by_ref();
+            waker.wake_by_ref();
         } else {
             console_log!("I sleep");
         }
@@ -124,7 +118,7 @@ impl Future for HandshakeFuture {
 
         match status {
             HandshakeStatus::InProgress => {
-                self.waker.replace(Some(cx.waker().clone()));
+                _ = self.waker.get_or_init(|| cx.waker().clone());
                 Poll::Pending
             }
             HandshakeStatus::Complete => Poll::Ready(Ok(())),
