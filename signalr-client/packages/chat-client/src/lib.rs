@@ -1,6 +1,9 @@
 mod utils;
 
-use signalr_wasm::connection::Connection;
+use std::str::RMatches;
+
+use futures::stream::StreamExt;
+use signalr_wasm::connection::{Connection, WebSocketEvent};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::*;
 
@@ -30,7 +33,21 @@ pub fn start() {
 #[wasm_bindgen]
 pub async fn promise() -> Result<(), JsValue> {
     let mut connection = Connection::new("ws://localhost:5095/chatHub");
-    let connect_future = connection.connect().map_err(|e| JsValue::from(e))?;
+    connection.connect().await.map_err(|e| JsValue::from(e))?;
 
-    connect_future.await.map_err(|e| JsValue::from(e))
+    while let Some(event) = connection.event_receiver.next().await {
+        match event {
+            WebSocketEvent::Message(data) => {
+                let string = str::from_utf8(data.as_slice()).unwrap_or("UNABLE TO DECODE UTF8");
+                console_log!("Message received: {}", string);
+            }
+            _ => {
+                console_error!("Unhandled event type");
+            }
+        }
+    }
+
+    console_log!("No more events");
+
+    return Ok(());
 }

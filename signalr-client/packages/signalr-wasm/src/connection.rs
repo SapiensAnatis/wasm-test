@@ -13,16 +13,18 @@ use web_sys::WebSocket;
 
 const CHANNEL_BOUND_SIZE: usize = 64;
 
-enum WebSocketEvent {
+pub enum WebSocketEvent {
     Open,
     Message(Vec<u8>),
 }
 
 pub struct Connection {
     url: String,
-    event_receiver: Receiver<WebSocketEvent>,
+    pub event_receiver: Receiver<WebSocketEvent>,
     event_sender: Sender<WebSocketEvent>,
     web_socket: OnceCell<WebSocket>,
+    on_open: OnceCell<Closure<dyn FnMut() -> ()>>,
+    on_message: OnceCell<Closure<dyn FnMut(MessageEvent) -> ()>>,
 }
 
 impl Connection {
@@ -34,6 +36,8 @@ impl Connection {
             event_receiver,
             event_sender,
             web_socket: OnceCell::new(),
+            on_open: OnceCell::new(),
+            on_message: OnceCell::new(),
         }
     }
 
@@ -48,19 +52,18 @@ impl Connection {
         let open_event_sender = self.event_sender.clone();
         let message_event_sender = self.event_sender.clone();
 
-        ws.set_onopen(Some(
+        let on_open = self.on_open.get_or_init(|| {
             Closure::<dyn FnMut()>::new(move || Self::on_open(open_event_sender.clone()))
-                .as_ref()
-                .unchecked_ref(),
-        ));
+        });
 
-        ws.set_onmessage(Some(
+        let on_message = self.on_message.get_or_init(|| {
             Closure::<dyn FnMut(_)>::new(move |e: MessageEvent| {
-                Self::on_connected(message_event_sender.clone(), e)
+                Self::on_message(message_event_sender.clone(), e)
             })
-            .as_ref()
-            .unchecked_ref(),
-        ));
+        });
+
+        ws.set_onopen(Some(on_open.as_ref().unchecked_ref()));
+        ws.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
         match self.event_receiver.next().await {
             Some(WebSocketEvent::Open) => {
@@ -100,9 +103,9 @@ impl Connection {
         })
     }
 
-    fn on_connected(mut sender: Sender<WebSocketEvent>, e: MessageEvent) {
+    fn on_message(mut sender: Sender<WebSocketEvent>, e: MessageEvent) {
         spawn_local(async move {
-            let mut data: String;
+            let data: String;
 
             if let Ok(text) = e.data().dyn_into::<js_sys::JsString>() {
                 data = text.into();
