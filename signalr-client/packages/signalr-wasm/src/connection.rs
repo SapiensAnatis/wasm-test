@@ -1,7 +1,12 @@
 use crate::log::*;
 use futures::Future;
+use std::cell::Cell;
+use std::cell::RefCell;
+use std::cell::RefMut;
 use std::num::Saturating;
+use std::ops::Deref;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::task::{Context, Poll};
 use wasm_bindgen::prelude::*;
 use web_sys::{ErrorEvent, MessageEvent, WebSocket};
@@ -54,29 +59,42 @@ impl Connection {
     }
 }
 
+#[derive(Copy, Clone)]
 enum HandshakeStatus {
     InProgress,
     Complete,
-    Error(String),
+    Error,
 }
 
 struct HandshakeFuture<'a> {
     websocket: &'a WebSocket,
     on_message: Closure<dyn FnMut(MessageEvent) -> ()>,
-
-    status: HandshakeStatus,
+    status: Rc<RefCell<HandshakeStatus>>,
 }
 
 impl<'a> HandshakeFuture<'a> {
     fn new(websocket: &'a WebSocket) -> Self {
-        Self {
-            websocket: websocket,
-            on_message: Closure::new(Self::on_message),
-            status: HandshakeStatus::InProgress,
-        }
+        let status_rc = Rc::new(RefCell::new(HandshakeStatus::InProgress));
+
+        let mut result = Self {
+            websocket,
+            status: status_rc.clone(),
+            on_message: Closure::new(move |e: MessageEvent| {
+                Self::on_message(e, status_rc.borrow_mut())
+            }),
+        };
+
+        result.init();
+
+        result
     }
 
-    fn on_message(e: MessageEvent) {
+    fn init(self: &mut Self) {
+        self.websocket
+            .set_onmessage(Some(self.on_message.as_ref().unchecked_ref()));
+    }
+
+    fn on_message(e: MessageEvent, status: RefMut<HandshakeStatus>) {
         console_log!("{:?}", e);
 
         if let Ok(_abuf) = e.data().dyn_into::<js_sys::ArrayBuffer>() {
@@ -93,10 +111,12 @@ impl Future for HandshakeFuture<'_> {
     type Output = Result<(), String>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match &self.status {
+        let status = *self.status.borrow();
+
+        match status {
             HandshakeStatus::InProgress => Poll::Pending,
             HandshakeStatus::Complete => Poll::Ready(Ok(())),
-            HandshakeStatus::Error(e) => Poll::Ready(Err(e.clone())),
+            HandshakeStatus::Error => Poll::Ready(Err(String::from("Handshake failed"))),
         }
     }
 }
