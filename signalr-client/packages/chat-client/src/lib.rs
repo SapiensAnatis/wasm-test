@@ -1,7 +1,11 @@
 mod utils;
 
 use signalr_wasm::connection::Connection;
+use std::future::*;
+use std::pin::Pin;
+use std::task::*;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::*;
 
 macro_rules! console_log {
     ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
@@ -20,13 +24,16 @@ extern "C" {
     fn error(s: &str);
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(start)]
 pub fn start() {
-    let mut connection = Connection::new("ws://localhost:5095/chatHub");
-    let connect_result = connection.connect();
+    utils::set_panic_hook();
+    console_log!("chat client: WASM loaded.");
+}
 
-    match connect_result {
-        Ok(()) => console_log!("Created websocket"),
-        Err(e) => console_error!("Failed to create websocket: {}", e),
-    }
+#[wasm_bindgen]
+pub async fn promise() -> Result<(), JsValue> {
+    let mut connection = Connection::new("ws://localhost:5095/chatHub");
+    let connect_future = connection.connect().map_err(|e| JsValue::from(e))?;
+
+    connect_future.await.map_err(|e| JsValue::from(e))
 }
