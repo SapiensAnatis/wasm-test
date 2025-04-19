@@ -13,12 +13,13 @@ use web_sys::WebSocket;
 
 const CHANNEL_BOUND_SIZE: usize = 64;
 
+#[derive(Debug)]
 pub enum WebSocketEvent {
     Open,
     Message(Vec<u8>),
 }
 
-pub struct Connection {
+pub struct SignalRConnection {
     url: String,
     pub event_receiver: Receiver<WebSocketEvent>,
     event_sender: Sender<WebSocketEvent>,
@@ -27,7 +28,7 @@ pub struct Connection {
     on_message: OnceCell<Closure<dyn FnMut(MessageEvent) -> ()>>,
 }
 
-impl Connection {
+impl SignalRConnection {
     pub fn new(url: &str) -> Self {
         let (event_sender, event_receiver) = channel::<WebSocketEvent>(CHANNEL_BOUND_SIZE);
 

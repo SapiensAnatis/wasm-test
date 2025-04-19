@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react'
 import './App.css'
 
 
-import * as ChatClient from 'chat-client';
+import {ChatClient } from 'chat-client';
+
+const client = new ChatClient("ws://localhost:5095/chatHub");
 
 let didInit = false;
 
@@ -21,8 +23,9 @@ function App() {
       setLoading(true);
       
       try {
-        await ChatClient.promise();
+        await client.connect();
         console.log("Success");
+        await client.infinite_read();
       }
       catch (e) {
         console.error(e);
