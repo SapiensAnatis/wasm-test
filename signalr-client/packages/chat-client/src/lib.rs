@@ -1,9 +1,6 @@
 mod utils;
 
 use signalr_wasm::connection::Connection;
-use std::future::*;
-use std::pin::Pin;
-use std::task::*;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::*;
 
