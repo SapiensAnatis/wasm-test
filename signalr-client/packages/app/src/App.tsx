@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 
 
-import {ChatClient } from 'chat-client';
+import { ChatClient } from 'chat-client';
 
 const client = new ChatClient("ws://localhost:5095/chatHub");
 
@@ -11,7 +11,7 @@ let didInit = false;
 function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
+  const [messages, setMessages] = useState<string[]>([]);
 
   useEffect(() => {
     const func = async () => {
@@ -21,10 +21,11 @@ function App() {
 
       didInit = true;
       setLoading(true);
-      
+
       try {
         await client.connect();
         console.log("Success");
+        client.register_callback((msg: string) => setMessages((messages) => [...messages, msg]))
       }
       catch (e) {
         console.error(e);
@@ -47,6 +48,7 @@ function App() {
       <p>
         Error: {error}
       </p>
+      {messages.map((m) => (<p>{m}</p>))}
     </>)
 }
 

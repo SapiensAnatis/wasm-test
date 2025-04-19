@@ -48,6 +48,7 @@ dependencies = [
  "async-broadcast",
  "console_error_panic_hook",
  "futures",
+ "js-sys",
  "signalr-wasm",
  "wasm-bindgen",
  "wasm-bindgen-futures",
