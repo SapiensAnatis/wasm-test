@@ -25,7 +25,6 @@ function App() {
       try {
         await client.connect();
         console.log("Success");
-        await client.infinite_read();
       }
       catch (e) {
         console.error(e);

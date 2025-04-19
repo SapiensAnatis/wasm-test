@@ -1,7 +1,5 @@
-use futures::channel::mpsc::channel;
-use futures::SinkExt;
+use async_broadcast::{broadcast, Receiver, Sender};
 use futures::StreamExt;
-use futures_channel::mpsc::{Receiver, Sender};
 use std::{cell::OnceCell, fmt};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::MessageEvent;
@@ -19,6 +17,15 @@ pub enum WebSocketEvent {
     Message(Vec<u8>),
 }
 
+impl Clone for WebSocketEvent {
+    fn clone(&self) -> Self {
+        match self {
+            WebSocketEvent::Open => WebSocketEvent::Open,
+            WebSocketEvent::Message(vec) => WebSocketEvent::Message(vec.clone()),
+        }
+    }
+}
+
 pub struct SignalRConnection {
     url: String,
     pub event_receiver: Receiver<WebSocketEvent>,
@@ -30,7 +37,7 @@ pub struct SignalRConnection {
 
 impl SignalRConnection {
     pub fn new(url: &str) -> Self {
-        let (event_sender, event_receiver) = channel::<WebSocketEvent>(CHANNEL_BOUND_SIZE);
+        let (event_sender, event_receiver) = broadcast::<WebSocketEvent>(CHANNEL_BOUND_SIZE);
 
         Self {
             url: String::from(url),
@@ -95,16 +102,16 @@ impl SignalRConnection {
         Ok(())
     }
 
-    fn on_open(mut sender: Sender<WebSocketEvent>) {
+    fn on_open(sender: Sender<WebSocketEvent>) {
         spawn_local(async move {
-            match sender.send(WebSocketEvent::Open).await {
-                Ok(()) => {}
+            match sender.broadcast(WebSocketEvent::Open).await {
+                Ok(_) => {}
                 Err(e) => console_error!("Failed to send open event: {}", e),
             }
         })
     }
 
-    fn on_message(mut sender: Sender<WebSocketEvent>, e: MessageEvent) {
+    fn on_message(sender: Sender<WebSocketEvent>, e: MessageEvent) {
         spawn_local(async move {
             let data: String;
 
@@ -115,10 +122,10 @@ impl SignalRConnection {
             }
 
             match sender
-                .send(WebSocketEvent::Message(data.into_bytes()))
+                .broadcast(WebSocketEvent::Message(data.into_bytes()))
                 .await
             {
-                Ok(()) => {}
+                Ok(_) => {}
                 Err(e) => console_error!("Failed to send message event: {}", e),
             }
         })
