@@ -24,7 +24,7 @@ impl Connection {
         }
     }
 
-    pub fn connect(self: &mut Self) -> Result<(), &'static str> {
+    pub fn connect(self: &mut Self) -> Result<HandshakeFuture, &'static str> {
         let ws = match WebSocket::new(self.url.as_str()) {
             Ok(ws) => ws,
             Err(_) => {
@@ -32,18 +32,11 @@ impl Connection {
             }
         };
 
-        let on_message_closure = Closure::<dyn FnMut(_)>::new(Self::on_connect_response);
+        self.websocket = Some(ws.clone());
 
-        ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
-        ws.set_onmessage(Some(on_message_closure.as_ref().unchecked_ref()));
+        let fut = HandshakeFuture::new(ws.clone());
 
-        // This is literally a memory leak, but otherwise JS attempts to call our function
-        // after it has been dropped
-        on_message_closure.forget();
-
-        self.websocket = Some(ws);
-
-        return Ok(());
+        return Ok(fut);
     }
 
     fn on_connect_response(e: MessageEvent) {
@@ -66,14 +59,14 @@ enum HandshakeStatus {
     Error,
 }
 
-struct HandshakeFuture<'a> {
-    websocket: &'a WebSocket,
+struct HandshakeFuture {
+    websocket: WebSocket,
     on_message: Closure<dyn FnMut(MessageEvent) -> ()>,
     status: Rc<RefCell<HandshakeStatus>>,
 }
 
-impl<'a> HandshakeFuture<'a> {
-    fn new(websocket: &'a WebSocket) -> Self {
+impl HandshakeFuture {
+    pub fn new(websocket: WebSocket) -> Self {
         let status_rc = Rc::new(RefCell::new(HandshakeStatus::InProgress));
 
         let mut result = Self {
@@ -107,7 +100,7 @@ impl<'a> HandshakeFuture<'a> {
     }
 }
 
-impl Future for HandshakeFuture<'_> {
+impl Future for HandshakeFuture {
     type Output = Result<(), String>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
