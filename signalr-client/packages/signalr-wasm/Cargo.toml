@@ -1,5 +1,5 @@
 [package]
-name = "signalr-client"
+name = "signalr-wasm"
 version = "0.1.0"
 authors = ["kay-mw <kiranwhalleymalhotra@gmail.com>"]
 edition = "2018"
@@ -25,7 +25,15 @@ wasm-bindgen-futures = "0.4.50"
 
 [dependencies.web-sys]
 version = "0.3.66"
-features = ['Headers', 'Request', 'RequestInit', 'RequestMode', 'Response', 'Window', 'console']
+features = [
+  "BinaryType",
+  "Blob",
+  "ErrorEvent",
+  "FileReader",
+  "MessageEvent",
+  "ProgressEvent",
+  "WebSocket",
+]
 
 
 [dev-dependencies]

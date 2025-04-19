@@ -1,6 +1,7 @@
+pub mod connection;
+
 #[macro_use]
 mod log;
-
 mod utils;
 
 use wasm_bindgen::prelude::*;

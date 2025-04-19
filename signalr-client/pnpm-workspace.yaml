@@ -1,5 +1,5 @@
 packages:
   - 'packages/app'
-  - 'packages/library/pkg'
+  - 'packages/chat-client/pkg'
 
   

@@ -1,3 +1,5 @@
+# !/usr/bin/nix develop -f
+
 { pkgs ? import <nixpkgs> { } }:
 let
   overrides = (builtins.fromTOML (builtins.readFile ./rust-toolchain.toml));
@@ -14,6 +16,8 @@ in pkgs.mkShell rec {
     dotnetCorePackages.sdk_9_0_1xx
     nodejs_23
     pnpm
+    typescript-language-server
+    typescript
   ];
 
   RUSTC_VERSION = overrides.toolchain.channel;

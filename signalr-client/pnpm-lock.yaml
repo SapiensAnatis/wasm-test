@@ -8,15 +8,15 @@ importers:
 
   packages/app:
     dependencies:
+      chat-client:
+        specifier: workspace:*
+        version: link:../chat-client/pkg
       react:
         specifier: ^19.0.0
         version: 19.1.0
       react-dom:
         specifier: ^19.0.0
         version: 19.1.0(react@19.1.0)
-      signalr-client:
-        specifier: workspace:*
-        version: link:../library/pkg
       vite-plugin-top-level-await:
         specifier: ^1.5.0
         version: 1.5.0(rollup@4.40.0)(vite@6.3.2)
@@ -58,7 +58,7 @@ importers:
         specifier: ^6.3.1
         version: 6.3.2
 
-  packages/library/pkg: {}
+  packages/chat-client/pkg: {}
 
 packages:
 

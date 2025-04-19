@@ -3,15 +3,15 @@ import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
 
-import * as signalRClient from 'signalr-client';
+import * as ChatClient from 'chat-client';
 
 function App() {
   const [count, setCount] = useState(0)
 
-  console.log(signalRClient.greet);
+  ChatClient.start();
 
   const handleClick = () => {
-    signalRClient.greet();
+    ChatClient.greet();
     setCount((count) => count + 1);
   }
 

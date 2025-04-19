@@ -11,3 +11,5 @@ macro_rules! console_log {
     // `bare_bones`
     ($($t:tt)*) => (crate::log::log(&format_args!($($t)*).to_string()))
 }
+
+pub(crate) use console_log;
