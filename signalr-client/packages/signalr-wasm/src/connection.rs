@@ -1,7 +1,6 @@
-use async_broadcast::{broadcast, Receiver, Sender};
-use futures::StreamExt;
-use std::{cell::OnceCell, fmt};
-use wasm_bindgen_futures::spawn_local;
+use futures::channel::oneshot;
+use serde::Deserialize;
+use std::cell::OnceCell;
 use web_sys::MessageEvent;
 
 use wasm_bindgen::prelude::*;
@@ -28,24 +27,14 @@ impl Clone for WebSocketEvent {
 
 pub struct SignalRConnection {
     url: String,
-    pub event_receiver: Receiver<WebSocketEvent>,
-    event_sender: Sender<WebSocketEvent>,
     web_socket: OnceCell<WebSocket>,
-    on_open: OnceCell<Closure<dyn FnMut() -> ()>>,
-    on_message: OnceCell<Closure<dyn FnMut(MessageEvent) -> ()>>,
 }
 
 impl SignalRConnection {
     pub fn new(url: &str) -> Self {
-        let (event_sender, event_receiver) = broadcast::<WebSocketEvent>(CHANNEL_BOUND_SIZE);
-
         Self {
             url: String::from(url),
-            event_receiver,
-            event_sender,
             web_socket: OnceCell::new(),
-            on_open: OnceCell::new(),
-            on_message: OnceCell::new(),
         }
     }
 
@@ -57,44 +46,84 @@ impl SignalRConnection {
             }
         };
 
-        let open_event_sender = self.event_sender.clone();
-        let message_event_sender = self.event_sender.clone();
+        let (open_sender, open_receiver) = oneshot::channel::<()>();
+        let (handshake_sender, handshake_receiver) = oneshot::channel::<Result<(), String>>();
 
-        let on_open = self.on_open.get_or_init(|| {
-            Closure::<dyn FnMut()>::new(move || Self::on_open(open_event_sender.clone()))
+        let on_open = Closure::once(move || {
+            if let Err(e) = open_sender.send(()) {
+                console_error!("Failed to send open message: {:?}", e);
+            }
         });
 
-        let on_message = self.on_message.get_or_init(|| {
-            Closure::<dyn FnMut(_)>::new(move |e: MessageEvent| {
-                Self::on_message(message_event_sender.clone(), e)
-            })
+        let on_message = Closure::once(move |e: MessageEvent| {
+            let parse_result = Self::parse_message(&e);
+            let message: String;
+
+            /* TODO: improve error handling here - can we avoid expect / panics? */
+
+            match parse_result {
+                Ok(msg) => message = msg,
+                Err(e) => {
+                    handshake_sender
+                        .send(Err(e))
+                        .expect("Failed to send on_message error");
+                    return;
+                }
+            }
+
+            console_log!("Received handshake response: {}", message);
+
+            let parsed_result: HandshakeResponse;
+
+            match serde_json::from_str(&message) {
+                Ok(val) => parsed_result = val,
+                Err(e) => {
+                    handshake_sender
+                        .send(Err(format!("Failed to parse JSON: {}", e)))
+                        .expect("Failed to send on_message error");
+                    return;
+                }
+            }
+
+            if let Some(error) = parsed_result.error {
+                handshake_sender
+                    .send(Err(format!("Received handshake error: {}", error)))
+                    .expect("Failed to send on_message error");
+                return;
+            }
+
+            handshake_sender
+                .send(Ok(()))
+                .expect("Failed to send on_message success");
         });
 
         ws.set_onopen(Some(on_open.as_ref().unchecked_ref()));
         ws.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
-        match self.event_receiver.next().await {
-            Some(WebSocketEvent::Open) => {
-                console_log!("Connected");
+        match open_receiver.await {
+            Ok(()) => {
+                console_log!("Received open event, transmitting handshake...");
             }
-            _ => {
-                return Err("Failed to get connected event".into());
-            }
+            Err(e) => return Err(format!("Failed to get open event: {}", e)),
         }
 
         if let Err(e) = ws.send_with_str("{\"protocol\": \"json\", \"version\": 1}\x1E") {
             return Err(format!("Failed to send handshake: {:?}", e));
         }
 
-        match self.event_receiver.next().await {
-            Some(WebSocketEvent::Message(data)) => {
-                let string = str::from_utf8(data.as_slice()).unwrap_or("FAILED TO LOAD BYTES");
-                console_log!("Message received: {}", string);
+        match handshake_receiver.await {
+            Ok(result) => {
+                if let Err(e) = result {
+                    return Err(format!("Handshake failed: {}", e));
+                }
+
+                console_log!("Successfully established connection");
             }
-            _ => {
-                return Err("Failed to get first message event".into());
-            }
+            Err(e) => return Err(format!("Failed to get handshake event: {}", e)),
         }
+
+        ws.set_onopen(None);
+        ws.set_onmessage(None);
 
         // TODO: handle gracefully
         self.web_socket.set(ws).unwrap();
@@ -102,53 +131,24 @@ impl SignalRConnection {
         Ok(())
     }
 
-    fn on_open(sender: Sender<WebSocketEvent>) {
-        spawn_local(async move {
-            match sender.broadcast(WebSocketEvent::Open).await {
-                Ok(_) => {}
-                Err(e) => console_error!("Failed to send open event: {}", e),
-            }
-        })
-    }
+    fn parse_message(e: &MessageEvent) -> Result<String, String> {
+        let data: String;
 
-    fn on_message(sender: Sender<WebSocketEvent>, e: MessageEvent) {
-        spawn_local(async move {
-            let data: String;
+        if let Ok(text) = e.data().dyn_into::<js_sys::JsString>() {
+            data = text.into();
+        } else {
+            return Err("Unsupported wire format".to_owned());
+        }
 
-            if let Ok(text) = e.data().dyn_into::<js_sys::JsString>() {
-                data = text.into();
-            } else {
-                unimplemented!("Unsupported wire format");
-            }
-
-            match sender
-                .broadcast(WebSocketEvent::Message(data.into_bytes()))
-                .await
-            {
-                Ok(_) => {}
-                Err(e) => console_error!("Failed to send message event: {}", e),
-            }
-        })
-    }
-}
-
-#[derive(Copy, Clone)]
-enum HandshakeStatus {
-    WaitingToConnect,
-    NotStarted,
-    InProgress,
-    Complete,
-    Error,
-}
-
-impl fmt::Display for HandshakeStatus {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            HandshakeStatus::WaitingToConnect => write!(f, "WAITING_TO_CONNECT"),
-            HandshakeStatus::NotStarted => write!(f, "NOT_STARTED"),
-            HandshakeStatus::InProgress => write!(f, "IN_PROGRESS"),
-            HandshakeStatus::Complete => write!(f, "COMPLETE"),
-            HandshakeStatus::Error => write!(f, "ERROR"),
+        if let Some(str) = data.strip_suffix('\x1E') {
+            Ok(str.to_owned())
+        } else {
+            Err("Unexpected message format".to_owned())
         }
     }
+}
+
+#[derive(Deserialize)]
+struct HandshakeResponse {
+    error: Option<String>,
 }

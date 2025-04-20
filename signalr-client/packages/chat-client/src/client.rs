@@ -1,4 +1,4 @@
-use std::{ops::Index, rc::Rc};
+use std::rc::Rc;
 
 use async_broadcast::Receiver;
 use signalr_wasm::connection::{SignalRConnection, WebSocketEvent};
@@ -21,27 +21,25 @@ impl ChatClient {
         console_log!("Starting read loop");
 
         spawn_local(async move {
-            loop {
-                while let Ok(event) = receiver.recv().await {
-                    match event {
-                        WebSocketEvent::Message(data) => {
-                            let data_str =
-                                str::from_utf8(data.as_slice()).unwrap_or("UNABLE TO DECODE");
-                            console_log!("Received message: {}", data_str);
+            while let Ok(event) = receiver.recv().await {
+                match event {
+                    WebSocketEvent::Message(data) => {
+                        let data_str =
+                            str::from_utf8(data.as_slice()).unwrap_or("UNABLE TO DECODE");
+                        console_log!("Received message: {}", data_str);
 
-                            let subscribers_vec = subscribers.borrow();
-                            let this = JsValue::null();
+                        let subscribers_vec = subscribers.borrow();
+                        let this = JsValue::null();
 
-                            for subscriber in subscribers_vec.deref() {
-                                match subscriber.call1(&this, &JsValue::from(data_str)) {
-                                    Ok(_) => {}
-                                    Err(e) => console_error!("Failed to call subscriber: {:?}", e),
-                                }
+                        for subscriber in subscribers_vec.deref() {
+                            match subscriber.call1(&this, &JsValue::from(data_str)) {
+                                Ok(_) => {}
+                                Err(e) => console_error!("Failed to call subscriber: {:?}", e),
                             }
                         }
-                        _ => {
-                            console_log!("Received event: {:?}", event);
-                        }
+                    }
+                    _ => {
+                        console_log!("Received event: {:?}", event);
                     }
                 }
             }
@@ -66,10 +64,6 @@ impl ChatClient {
             .connect()
             .await
             .map_err(|e| JsValue::from(e))?;
-        Self::start_read(
-            self.connection.event_receiver.clone(),
-            self.message_subscribers.clone(),
-        );
 
         return Ok(());
     }
