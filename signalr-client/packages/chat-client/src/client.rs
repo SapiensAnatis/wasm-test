@@ -10,7 +10,6 @@ use wasm_bindgen_futures::{js_sys, spawn_local};
 pub struct ChatClient {
     connection: SignalRConnection,
     message_subscribers: Rc<RefCell<Vec<js_sys::Function>>>,
-    current_invocation: i32,
 }
 
 impl ChatClient {
@@ -42,7 +41,6 @@ impl ChatClient {
         Self {
             connection,
             message_subscribers: Rc::new(RefCell::new(vec![])),
-            current_invocation: 0,
         }
     }
 

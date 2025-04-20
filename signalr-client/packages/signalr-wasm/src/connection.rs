@@ -1,4 +1,3 @@
-use core::panic::PanicMessage;
 use futures::channel::mpsc::{self, Receiver};
 use futures::channel::oneshot;
 use futures::SinkExt;
@@ -186,8 +185,8 @@ impl SignalRConnection {
         let invocation = Invocation::new(self.invocation_id, target, args);
         let message_str = serde_json::to_string(&invocation)
             .map(|mut str| {
-                str.push_str("\x1E");
-                return str;
+                str.push('\x1E');
+                str
             })
             .map_err(|e| format!("Failed to serialize invocation: {}", e))?;
 
@@ -223,11 +222,11 @@ struct Invocation {
 
 impl Invocation {
     pub fn new(invocation_id: usize, target: String, arguments: Vec<String>) -> Self {
-        return Self {
+        Self {
             message_type: 1,
             invocation_id: invocation_id.to_string(),
             target,
             arguments,
-        };
+        }
     }
 }
