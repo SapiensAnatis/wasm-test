@@ -1,9 +1,8 @@
-use std::{ops::Index, rc::Rc};
+use std::rc::Rc;
 
 use futures::StreamExt;
-use signalr_wasm::connection::{SignalRConnection, WebSocketEvent};
+use signalr_wasm::connection::SignalRConnection;
 use std::cell::RefCell;
-use std::ops::Deref;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{js_sys, spawn_local};
 
@@ -40,25 +39,25 @@ impl ChatClient {
     pub fn new(url: &str) -> Self {
         let connection = SignalRConnection::new(url);
 
-        return Self {
+        Self {
             connection,
             message_subscribers: Rc::new(RefCell::new(vec![])),
             current_invocation: 0,
-        };
+        }
     }
 
-    pub async fn connect(self: &mut Self) -> Result<(), JsValue> {
+    pub async fn connect(&mut self) -> Result<(), JsValue> {
         self.connection
             .connect()
             .await
-            .map_err(|e| JsValue::from(e))?;
+            .map_err(JsValue::from)?;
 
         self.start_read();
 
-        return Ok(());
+        Ok(())
     }
 
-    pub fn register_callback(self: &mut Self, on_message: js_sys::Function) {
+    pub fn register_callback(&mut self, on_message: js_sys::Function) {
         let mut sub_ref = self.message_subscribers.borrow_mut();
         sub_ref.push(on_message);
     }

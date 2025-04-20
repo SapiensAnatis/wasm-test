@@ -177,7 +177,6 @@ impl SignalRConnection {
 
                 if let Err(e) = sender_clone.send(parsed).await {
                     console_error!("Failed to send message: {}", e);
-                    return;
                 }
             });
         });
