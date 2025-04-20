@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
-use crate::message::{CompletionMessage, InvocationMessage, SignalRMessage};
+use crate::message::{CompletionMessage, SignalRMessage};
 
 type OneshotSender<T> = futures::channel::oneshot::Sender<T>;
 
@@ -73,7 +73,7 @@ impl ChatClient {
 
         sender
             .send(SignalRMessage::Completion(message))
-            .map_err(|_| format!("Failed to send subscriber message to subscriber"))
+            .map_err(|_| "Failed to send subscriber message to subscriber".to_string())
     }
 }
 
