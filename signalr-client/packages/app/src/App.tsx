@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, FormEvent } from 'react'
 import './App.css'
 
 
@@ -9,9 +9,8 @@ const client = new ChatClient("ws://localhost:5095/chatHub");
 let didInit = false;
 
 function App() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [messages, setMessages] = useState<string[]>([]);
 
   useEffect(() => {
     const func = async () => {
@@ -20,12 +19,10 @@ function App() {
       }
 
       didInit = true;
-      setLoading(true);
 
       try {
         await client.connect();
         console.log("Success");
-        client.register_callback((msg: string) => setMessages((messages) => [...messages, msg]))
       }
       catch (e) {
         console.error(e);
@@ -39,6 +36,22 @@ function App() {
     func();
   }, []);
 
+  const handleSubmit = useCallback((evt: FormEvent<HTMLFormElement>) => {
+    evt.preventDefault();
+
+    const form = evt.target as HTMLFormElement;
+    const values = new FormData(form);
+
+
+    const message = values.get("message")?.valueOf();
+    if (!message || typeof message !== 'string') {
+      return;
+    }
+    
+    client.send_message("wasm", message);
+
+  }, [client]);
+
 
   return (
     <>
@@ -48,7 +61,13 @@ function App() {
       <p>
         Error: {error}
       </p>
-      {messages.map((m) => (<p>{m}</p>))}
+      <div>
+        <form onSubmit={handleSubmit}>
+          <label htmlFor="message">Enter a message</label>
+          <input name="message" required id="message" />
+          <button type="submit" disabled={loading}>Send</button>
+        </form>
+      </div>
     </>)
 }
 

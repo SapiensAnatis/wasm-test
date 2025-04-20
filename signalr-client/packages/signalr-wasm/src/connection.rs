@@ -1,7 +1,8 @@
+use core::panic::PanicMessage;
 use futures::channel::mpsc::{self, Receiver};
 use futures::channel::oneshot;
 use futures::SinkExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::cell::OnceCell;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::MessageEvent;
@@ -13,25 +14,11 @@ use web_sys::WebSocket;
 
 const CHANNEL_BOUND_SIZE: usize = 64;
 
-#[derive(Debug)]
-pub enum WebSocketEvent {
-    Open,
-    Message(Vec<u8>),
-}
-
-impl Clone for WebSocketEvent {
-    fn clone(&self) -> Self {
-        match self {
-            WebSocketEvent::Open => WebSocketEvent::Open,
-            WebSocketEvent::Message(vec) => WebSocketEvent::Message(vec.clone()),
-        }
-    }
-}
-
 pub struct SignalRConnection {
     url: String,
     web_socket: OnceCell<WebSocket>,
     on_message_closure: Option<Closure<dyn FnMut(MessageEvent)>>,
+    invocation_id: usize,
 }
 
 impl SignalRConnection {
@@ -40,6 +27,7 @@ impl SignalRConnection {
             url: String::from(url),
             web_socket: OnceCell::new(),
             on_message_closure: None,
+            invocation_id: 0,
         }
     }
 
@@ -177,6 +165,7 @@ impl SignalRConnection {
 
                 if let Err(e) = sender_clone.send(parsed).await {
                     console_error!("Failed to send message: {}", e);
+                    return;
                 }
             });
         });
@@ -185,6 +174,29 @@ impl SignalRConnection {
         self.on_message_closure = Some(on_message_closure);
 
         Ok(receiver)
+    }
+
+    pub fn send_invocation(&mut self, target: String, args: Vec<String>) -> Result<(), String> {
+        let ws: &WebSocket = match self.web_socket.get_mut() {
+            Some(ws) => ws,
+            None => {
+                return Err("No open socket".to_owned());
+            }
+        };
+
+        self.invocation_id += 1;
+        let invocation = Invocation::new(self.invocation_id, target, args);
+        let message_str = serde_json::to_string(&invocation)
+            .map(|mut str| {
+                str.push_str("\x1E");
+                return str;
+            })
+            .map_err(|e| format!("Failed to serialize invocation: {}", e))?;
+
+        ws.send_with_str(message_str.as_str())
+            .map_err(|e| format!("Failed to send message: {:?}", e))?;
+
+        Ok(())
     }
 }
 
@@ -199,4 +211,25 @@ impl Drop for SignalRConnection {
 #[derive(Deserialize)]
 struct HandshakeResponse {
     error: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Invocation {
+    #[serde(rename = "type")]
+    message_type: u8,
+    invocation_id: String,
+    target: String,
+    arguments: Vec<String>,
+}
+
+impl Invocation {
+    pub fn new(invocation_id: usize, target: String, arguments: Vec<String>) -> Self {
+        return Self {
+            message_type: 1,
+            invocation_id: invocation_id.to_string(),
+            target,
+            arguments,
+        };
+    }
 }

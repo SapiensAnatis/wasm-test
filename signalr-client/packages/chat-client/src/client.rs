@@ -47,10 +47,7 @@ impl ChatClient {
     }
 
     pub async fn connect(&mut self) -> Result<(), JsValue> {
-        self.connection
-            .connect()
-            .await
-            .map_err(JsValue::from)?;
+        self.connection.connect().await.map_err(JsValue::from)?;
 
         self.start_read();
 
@@ -60,5 +57,10 @@ impl ChatClient {
     pub fn register_callback(&mut self, on_message: js_sys::Function) {
         let mut sub_ref = self.message_subscribers.borrow_mut();
         sub_ref.push(on_message);
+    }
+
+    pub fn send_message(&mut self, user: String, message: String) -> Result<(), String> {
+        self.connection
+            .send_invocation("SendMessage".to_owned(), vec![user, message])
     }
 }
