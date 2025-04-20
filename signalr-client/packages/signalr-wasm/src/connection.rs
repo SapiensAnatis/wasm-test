@@ -54,7 +54,7 @@ impl SignalRConnection {
             /* TODO: improve error handling here - can we avoid expect / panics? */
 
             let message: String = match parse_result {
-                Ok(msg) => msg,
+                Ok(mut msg) => msg.remove(0),
                 Err(e) => {
                     handshake_sender
                         .send(Err(e))
@@ -121,7 +121,7 @@ impl SignalRConnection {
         Ok(())
     }
 
-    fn parse_message(e: &MessageEvent) -> Result<String, String> {
+    fn parse_message(e: &MessageEvent) -> Result<Vec<String>, String> {
         let data: String;
 
         if let Ok(text) = e.data().dyn_into::<js_sys::JsString>() {
@@ -130,11 +130,7 @@ impl SignalRConnection {
             return Err("Unsupported wire format".to_owned());
         }
 
-        if let Some(str) = data.strip_suffix('\x1E') {
-            Ok(str.to_owned())
-        } else {
-            Err("Unexpected message format".to_owned())
-        }
+        Ok(data.split_terminator('\x1E').map(str::to_owned).collect())
     }
 
     pub fn open_message_channel(&mut self) -> Result<Receiver<String>, String> {
@@ -156,16 +152,18 @@ impl SignalRConnection {
 
             spawn_local(async move {
                 let parsed = match Self::parse_message(&e) {
-                    Ok(str) => str,
+                    Ok(vec) => vec,
                     Err(e) => {
                         console_error!("Failed to parse message: {}", e);
                         return;
                     }
                 };
 
-                if let Err(e) = sender_clone.send(parsed).await {
-                    console_error!("Failed to send message: {}", e);
-                    return;
+                for message in parsed {
+                    if let Err(e) = sender_clone.send(message).await {
+                        console_error!("Failed to send message: {}", e);
+                        return;
+                    }
                 }
             });
         });
