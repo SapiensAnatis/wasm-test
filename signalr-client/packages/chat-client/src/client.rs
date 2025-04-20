@@ -1,22 +1,22 @@
-use std::{cell::OnceCell, collections::HashMap, rc::Rc};
+use std::{cell::RefMut, collections::HashMap, rc::Rc};
 
 use futures::{
-    channel::oneshot::{self, Receiver},
+    channel::oneshot::{self},
     StreamExt,
 };
-use serde::Deserialize;
-use serde_json::Value;
 use signalr_wasm::connection::SignalRConnection;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::{js_sys, spawn_local};
+use wasm_bindgen_futures::spawn_local;
+
+use crate::message::{CompletionMessage, InvocationMessage, SignalRMessage};
 
 type OneshotSender<T> = futures::channel::oneshot::Sender<T>;
 
 #[wasm_bindgen]
 pub struct ChatClient {
     connection: SignalRConnection,
-    invocation_subscribers: Rc<RefCell<HashMap<String, OneshotSender<String>>>>,
+    invocation_subscribers: Rc<RefCell<HashMap<String, OneshotSender<SignalRMessage>>>>,
     invocation_id: usize,
 }
 
@@ -31,47 +31,50 @@ impl ChatClient {
             while let Some(message) = receiver.next().await {
                 console_log!("Received message: {}", message);
 
-                let parsed_message: Value = match serde_json::from_str(&message) {
-                    Ok(v) => v,
+                match serde_json::from_str(&message) {
+                    Ok(SignalRMessage::Completion(m)) => {
+                        if let Err(e) = Self::handle_completion(m, subscribers_clone.borrow_mut()) {
+                            console_error!("{}", e);
+                        }
+                    }
+                    Ok(SignalRMessage::Invocation(_)) => {
+                        console_log!("Received invocation");
+                    }
+                    Ok(SignalRMessage::Ping) => {
+                        console_log!("Pong!");
+                    }
                     Err(e) => {
                         console_error!("Failed to deserialize message: {}", e);
-                        continue;
                     }
                 };
-
-                let invocation_id = match &parsed_message["Value"] {
-                    Value::String(s) => s,
-                    _ => {
-                        console_error!("Failed to get invocation ID from message");
-                        continue;
-                    }
-                };
-
-                let sender: OneshotSender<String>;
-
-                {
-                    let mut map = subscribers_clone.borrow_mut();
-
-                    sender = match map.remove(invocation_id) {
-                        Some(s) => s,
-                        None => {
-                            console_log!("No subscriber found for invocation {}", invocation_id);
-                            continue;
-                        }
-                    };
-                }
-
-                if let Err(e) = sender.send(message) {
-                    console_error!("Failed to send message to subscriber: {}", e);
-                    continue;
-                }
             }
         });
 
         Ok(())
     }
 
-    fn handle_invocation_response(message: String, parsed_message: Value) {}
+    fn handle_completion(
+        message: CompletionMessage,
+        mut subscribers: RefMut<HashMap<String, OneshotSender<SignalRMessage>>>,
+    ) -> Result<(), String> {
+        let sender: OneshotSender<SignalRMessage>;
+
+        {
+            sender = match subscribers.remove(&message.invocation_id) {
+                Some(s) => s,
+                None => {
+                    return Err(format!(
+                        "Failed to find subscriber for invocation ID {}",
+                        message.invocation_id
+                    ))
+                }
+            };
+        }
+
+        sender
+            .send(SignalRMessage::Completion(message))
+            .map_err(|_| format!("Failed to send subscriber message to subscriber"))
+    }
 }
 
 #[wasm_bindgen]
@@ -113,7 +116,7 @@ impl ChatClient {
     }
 
     async fn await_response(&mut self, invocation_id: String) -> Result<(), String> {
-        let (sender, receiver) = oneshot::channel::<String>();
+        let (sender, receiver) = oneshot::channel::<SignalRMessage>();
 
         {
             self.invocation_subscribers
@@ -126,7 +129,7 @@ impl ChatClient {
             .await
             .map_err(|e| format!("Failed to receive response: {}", e))?;
 
-        console_log!("Received invocation reply: {}", message);
+        console_log!("Received invocation reply: {:?}", message);
 
         Ok(())
     }

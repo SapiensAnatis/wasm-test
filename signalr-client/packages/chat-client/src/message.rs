@@ -1,8 +1,6 @@
-use std::fmt;
-
 use serde::{
-    de::{self, Deserializer, MapAccess, SeqAccess, Unexpected, Visitor},
-    Deserialize,
+    de::{self, Unexpected},
+    forward_to_deserialize_any, Deserialize,
 };
 use serde_json::Value;
 
@@ -10,15 +8,27 @@ trait MessageType {
     const TYPE: u64;
 }
 
-#[derive(Deserialize)]
-struct CompletionMessage {
-    invocation_id: String,
-    result: Value,
-    error: Option<String>,
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionMessage {
+    pub invocation_id: String,
+    pub result: Value,
+    pub error: Option<String>,
 }
 
 impl MessageType for CompletionMessage {
     const TYPE: u64 = 3;
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct InvocationMessage {
+    pub target: String,
+    pub arguments: Vec<String>,
+}
+
+impl MessageType for InvocationMessage {
+    const TYPE: u64 = 1;
 }
 
 // enum MessageType {
@@ -31,8 +41,10 @@ impl MessageType for CompletionMessage {
 //     Close = 7,
 // }
 
-enum SignalRMessage {
+#[derive(Debug)]
+pub enum SignalRMessage {
     Ping,
+    Invocation(InvocationMessage),
     Completion(CompletionMessage),
 }
 
@@ -44,11 +56,17 @@ impl<'de> Deserialize<'de> for SignalRMessage {
         let value = Value::deserialize(deserializer)?;
 
         match value.get("type").and_then(Value::as_u64) {
-            Some(1) => unimplemented!("can't deserialize Invocation"),
+            Some(InvocationMessage::TYPE) => {
+                let inner_message = InvocationMessage::deserialize(value).map_err(|_| {
+                    de::Error::invalid_type(Unexpected::StructVariant, &"a CompletionMessage")
+                })?;
+
+                Ok(SignalRMessage::Invocation(inner_message))
+            }
             Some(2) => unimplemented!("can't deserialize StreamItem"),
             Some(CompletionMessage::TYPE) => {
                 let inner_message = CompletionMessage::deserialize(value).map_err(|_| {
-                    de::Error::invalid_value(Unexpected::StructVariant, &"a CompletionMessage")
+                    de::Error::invalid_type(Unexpected::StructVariant, &"a CompletionMessage")
                 })?;
 
                 Ok(SignalRMessage::Completion(inner_message))
