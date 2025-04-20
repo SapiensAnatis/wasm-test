@@ -1,6 +1,7 @@
+use futures::channel::mpsc::{Receiver, Sender};
 use futures::channel::oneshot;
 use serde::Deserialize;
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
 use web_sys::MessageEvent;
 
 use wasm_bindgen::prelude::*;
@@ -28,6 +29,7 @@ impl Clone for WebSocketEvent {
 pub struct SignalRConnection {
     url: String,
     web_socket: OnceCell<WebSocket>,
+    on_message_closure: Option<Closure<dyn FnMut(MessageEvent) -> ()>>,
 }
 
 impl SignalRConnection {
@@ -35,6 +37,7 @@ impl SignalRConnection {
         Self {
             url: String::from(url),
             web_socket: OnceCell::new(),
+            on_message_closure: None,
         }
     }
 
@@ -145,6 +148,14 @@ impl SignalRConnection {
         } else {
             Err("Unexpected message format".to_owned())
         }
+    }
+
+    fn open_message_channel(self: &Self) -> Result<Receiver<String>, String> {
+        if self.on_message_closure.is_some() {
+            return Err("Already listening for messages".to_owned());
+        }
+
+        Ok(unimplemented!("lol"))
     }
 }
 
