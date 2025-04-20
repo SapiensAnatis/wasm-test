@@ -2,6 +2,7 @@
 mod log;
 
 mod client;
+mod message;
 mod utils;
 
 use wasm_bindgen::prelude::*;

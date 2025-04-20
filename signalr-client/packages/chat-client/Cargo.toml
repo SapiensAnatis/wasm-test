@@ -21,8 +21,9 @@ signalr-wasm = { path = "../signalr-wasm" }
 console_error_panic_hook = { version = "0.1.7", optional = true }
 wasm-bindgen-futures = "0.4.50"
 futures = "0.3.31"
-async-broadcast = "0.7.2"
 js-sys = "0.3.77"
+serde_json = "1.0.140"
+serde = { version = "1.0.219", features = ["std", "derive", "alloc"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"

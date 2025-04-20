@@ -17,7 +17,6 @@ pub struct SignalRConnection {
     url: String,
     web_socket: OnceCell<WebSocket>,
     on_message_closure: Option<Closure<dyn FnMut(MessageEvent)>>,
-    invocation_id: usize,
 }
 
 impl SignalRConnection {
@@ -26,7 +25,6 @@ impl SignalRConnection {
             url: String::from(url),
             web_socket: OnceCell::new(),
             on_message_closure: None,
-            invocation_id: 0,
         }
     }
 
@@ -173,7 +171,12 @@ impl SignalRConnection {
         Ok(receiver)
     }
 
-    pub fn send_invocation(&mut self, target: String, args: Vec<String>) -> Result<(), String> {
+    pub fn send_invocation<'a>(
+        &mut self,
+        id: &str,
+        target: &'a str,
+        args: &'a [&'a str],
+    ) -> Result<(), String> {
         let ws: &WebSocket = match self.web_socket.get_mut() {
             Some(ws) => ws,
             None => {
@@ -181,8 +184,7 @@ impl SignalRConnection {
             }
         };
 
-        self.invocation_id += 1;
-        let invocation = Invocation::new(self.invocation_id, target, args);
+        let invocation = Invocation::new(id, target, args);
         let message_str = serde_json::to_string(&invocation)
             .map(|mut str| {
                 str.push('\x1E');
@@ -212,19 +214,19 @@ struct HandshakeResponse {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Invocation {
+struct Invocation<'a> {
     #[serde(rename = "type")]
     message_type: u8,
-    invocation_id: String,
-    target: String,
-    arguments: Vec<String>,
+    invocation_id: &'a str,
+    target: &'a str,
+    arguments: &'a [&'a str],
 }
 
-impl Invocation {
-    pub fn new(invocation_id: usize, target: String, arguments: Vec<String>) -> Self {
+impl<'a> Invocation<'a> {
+    pub fn new(invocation_id: &'a str, target: &'a str, arguments: &'a [&'a str]) -> Self {
         Self {
             message_type: 1,
-            invocation_id: invocation_id.to_string(),
+            invocation_id,
             target,
             arguments,
         }
