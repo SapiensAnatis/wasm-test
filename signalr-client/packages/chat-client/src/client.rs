@@ -1,6 +1,6 @@
-use std::rc::Rc;
+use std::{ops::Index, rc::Rc};
 
-use async_broadcast::Receiver;
+use futures::StreamExt;
 use signalr_wasm::connection::{SignalRConnection, WebSocketEvent};
 use std::cell::RefCell;
 use std::ops::Deref;
@@ -11,37 +11,24 @@ use wasm_bindgen_futures::{js_sys, spawn_local};
 pub struct ChatClient {
     connection: SignalRConnection,
     message_subscribers: Rc<RefCell<Vec<js_sys::Function>>>,
+    current_invocation: i32,
 }
 
 impl ChatClient {
-    pub fn start_read(
-        mut receiver: Receiver<WebSocketEvent>,
-        subscribers: Rc<RefCell<Vec<js_sys::Function>>>,
-    ) {
+    pub fn start_read(&mut self) {
         console_log!("Starting read loop");
 
+        let mut receiver = match self.connection.open_message_channel() {
+            Ok(recv) => recv,
+            Err(e) => {
+                console_error!("Failed to open message channel: {}", e);
+                return;
+            }
+        };
+
         spawn_local(async move {
-            while let Ok(event) = receiver.recv().await {
-                match event {
-                    WebSocketEvent::Message(data) => {
-                        let data_str =
-                            str::from_utf8(data.as_slice()).unwrap_or("UNABLE TO DECODE");
-                        console_log!("Received message: {}", data_str);
-
-                        let subscribers_vec = subscribers.borrow();
-                        let this = JsValue::null();
-
-                        for subscriber in subscribers_vec.deref() {
-                            match subscriber.call1(&this, &JsValue::from(data_str)) {
-                                Ok(_) => {}
-                                Err(e) => console_error!("Failed to call subscriber: {:?}", e),
-                            }
-                        }
-                    }
-                    _ => {
-                        console_log!("Received event: {:?}", event);
-                    }
-                }
+            while let Some(message) = receiver.next().await {
+                console_log!("Received message: {}", message);
             }
         });
     }
@@ -56,6 +43,7 @@ impl ChatClient {
         return Self {
             connection,
             message_subscribers: Rc::new(RefCell::new(vec![])),
+            current_invocation: 0,
         };
     }
 
@@ -64,6 +52,8 @@ impl ChatClient {
             .connect()
             .await
             .map_err(|e| JsValue::from(e))?;
+
+        self.start_read();
 
         return Ok(());
     }

@@ -1,7 +1,9 @@
-use futures::channel::mpsc::{Receiver, Sender};
+use futures::channel::mpsc::{self, Receiver};
 use futures::channel::oneshot;
+use futures::SinkExt;
 use serde::Deserialize;
-use std::cell::{OnceCell, RefCell};
+use std::cell::OnceCell;
+use wasm_bindgen_futures::spawn_local;
 use web_sys::MessageEvent;
 
 use wasm_bindgen::prelude::*;
@@ -29,7 +31,7 @@ impl Clone for WebSocketEvent {
 pub struct SignalRConnection {
     url: String,
     web_socket: OnceCell<WebSocket>,
-    on_message_closure: Option<Closure<dyn FnMut(MessageEvent) -> ()>>,
+    on_message_closure: Option<Closure<dyn FnMut(MessageEvent)>>,
 }
 
 impl SignalRConnection {
@@ -41,7 +43,7 @@ impl SignalRConnection {
         }
     }
 
-    pub async fn connect(self: &mut Self) -> Result<(), String> {
+    pub async fn connect(&mut self) -> Result<(), String> {
         let ws = match WebSocket::new(self.url.as_str()) {
             Ok(ws) => ws,
             Err(_) => {
@@ -60,33 +62,30 @@ impl SignalRConnection {
 
         let on_message = Closure::once(move |e: MessageEvent| {
             let parse_result = Self::parse_message(&e);
-            let message: String;
 
             /* TODO: improve error handling here - can we avoid expect / panics? */
 
-            match parse_result {
-                Ok(msg) => message = msg,
+            let message: String = match parse_result {
+                Ok(msg) => msg,
                 Err(e) => {
                     handshake_sender
                         .send(Err(e))
                         .expect("Failed to send on_message error");
                     return;
                 }
-            }
+            };
 
             console_log!("Received handshake response: {}", message);
 
-            let parsed_result: HandshakeResponse;
-
-            match serde_json::from_str(&message) {
-                Ok(val) => parsed_result = val,
+            let parsed_result: HandshakeResponse = match serde_json::from_str(&message) {
+                Ok(val) => val,
                 Err(e) => {
                     handshake_sender
                         .send(Err(format!("Failed to parse JSON: {}", e)))
                         .expect("Failed to send on_message error");
                     return;
                 }
-            }
+            };
 
             if let Some(error) = parsed_result.error {
                 handshake_sender
@@ -150,12 +149,51 @@ impl SignalRConnection {
         }
     }
 
-    fn open_message_channel(self: &Self) -> Result<Receiver<String>, String> {
+    pub fn open_message_channel(&mut self) -> Result<Receiver<String>, String> {
         if self.on_message_closure.is_some() {
             return Err("Already listening for messages".to_owned());
         }
 
-        Ok(unimplemented!("lol"))
+        let ws: &WebSocket = match self.web_socket.get_mut() {
+            Some(ws) => ws,
+            None => {
+                return Err("No open socket".to_owned());
+            }
+        };
+
+        let (sender, receiver) = mpsc::channel::<String>(CHANNEL_BOUND_SIZE);
+
+        let on_message_closure = Closure::<dyn FnMut(_)>::new(move |e: MessageEvent| {
+            let mut sender_clone = sender.clone();
+
+            spawn_local(async move {
+                let parsed = match Self::parse_message(&e) {
+                    Ok(str) => str,
+                    Err(e) => {
+                        console_error!("Failed to parse message: {}", e);
+                        return;
+                    }
+                };
+
+                if let Err(e) = sender_clone.send(parsed).await {
+                    console_error!("Failed to send message: {}", e);
+                    return;
+                }
+            });
+        });
+
+        ws.set_onmessage(Some(on_message_closure.as_ref().unchecked_ref()));
+        self.on_message_closure = Some(on_message_closure);
+
+        Ok(receiver)
+    }
+}
+
+impl Drop for SignalRConnection {
+    fn drop(&mut self) {
+        if let Some(ws) = self.web_socket.get_mut() {
+            ws.set_onmessage(None);
+        }
     }
 }
 
