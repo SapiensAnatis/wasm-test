@@ -16,4 +16,3 @@ macro_rules! console_log {
 macro_rules! console_error {
     ($($t:tt)*) => (crate::log::error(&format_args!($($t)*).to_string()))
 }
-

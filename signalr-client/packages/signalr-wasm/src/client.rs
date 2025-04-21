@@ -1,4 +1,3 @@
-
 use wasm_bindgen::prelude::*;
 
 use crate::connection::SignalRConnection;
@@ -7,9 +6,8 @@ type OneshotSender<T> = futures::channel::oneshot::Sender<T>;
 
 #[wasm_bindgen]
 pub struct ChatClient {
-    connection: SignalRConnection
+    connection: SignalRConnection,
 }
-
 
 #[wasm_bindgen]
 impl ChatClient {
@@ -17,9 +15,7 @@ impl ChatClient {
     pub fn new(url: &str) -> Self {
         let connection = SignalRConnection::new(url);
 
-        Self {
-            connection,
-        }
+        Self { connection }
     }
 
     pub async fn connect(&mut self) -> Result<(), JsValue> {
@@ -35,6 +31,4 @@ impl ChatClient {
             .await
             .map_err(JsValue::from)
     }
-
-
 }

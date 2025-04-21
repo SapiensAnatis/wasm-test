@@ -1,10 +1,9 @@
-use std::cell::RefMut;
-use futures::channel::oneshot::Sender;
-use futures::StreamExt;
-use wasm_bindgen_futures::spawn_local;
 use crate::connection::{SignalRConnection, SubscriberMap};
 use crate::message::{CompletionMessage, SignalRMessage};
-
+use futures::channel::oneshot::Sender;
+use futures::StreamExt;
+use std::cell::RefMut;
+use wasm_bindgen_futures::spawn_local;
 
 impl SignalRConnection {
     pub fn start_reader(&mut self) -> Result<(), String> {
@@ -43,8 +42,6 @@ impl SignalRConnection {
         message: CompletionMessage,
         mut subscribers: RefMut<SubscriberMap>,
     ) -> Result<(), String> {
-        
-
         // TODO: Removing here won't work for streaming invocations, it should be the invocation
         // caller who removes their own sender from the map.
         let sender: Sender<SignalRMessage> = match subscribers.remove(&message.invocation_id) {

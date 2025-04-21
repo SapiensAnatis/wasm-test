@@ -3,10 +3,10 @@ use wasm_bindgen::prelude::wasm_bindgen;
 #[macro_use]
 mod log;
 
-mod utils;
 mod client;
 mod connection;
 mod message;
+mod utils;
 
 #[wasm_bindgen(start)]
 pub fn start() {

@@ -4,7 +4,11 @@ use futures::channel::oneshot;
 use web_sys::WebSocket;
 
 impl SignalRConnection {
-    pub async fn send_invocation(&mut self, target: String, args: Vec<String>) -> Result<(), String> {
+    pub async fn send_invocation(
+        &mut self,
+        target: String,
+        args: Vec<String>,
+    ) -> Result<(), String> {
         let ws: &WebSocket = match self.web_socket.get_mut() {
             Some(ws) => ws,
             None => {
@@ -34,7 +38,7 @@ impl SignalRConnection {
                 .insert(invocation_id, sender);
         }
 
-        console_log!("Waiting for response");;
+        console_log!("Waiting for response");
 
         // TODO: consider timeout
         let message = receiver

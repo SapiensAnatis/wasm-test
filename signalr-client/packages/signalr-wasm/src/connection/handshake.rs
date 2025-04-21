@@ -1,9 +1,9 @@
+use crate::connection::SignalRConnection;
 use futures::channel::oneshot;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::closure::Closure;
-use web_sys::{MessageEvent, WebSocket};
-use crate::connection::SignalRConnection;
 use wasm_bindgen::JsCast;
+use web_sys::{MessageEvent, WebSocket};
 
 #[derive(Serialize)]
 struct HandshakeRequest {
@@ -83,7 +83,10 @@ impl SignalRConnection {
             Err(e) => return Err(format!("Failed to get open event: {}", e)),
         }
 
-        let request = HandshakeRequest { protocol: "json", version: 1};
+        let request = HandshakeRequest {
+            protocol: "json",
+            version: 1,
+        };
         if let Err(e) = Self::send_struct(&ws, &request) {
             return Err(format!("Failed to send handshake: {:?}", e));
         }
@@ -102,12 +105,10 @@ impl SignalRConnection {
         ws.set_onopen(None);
         ws.set_onmessage(None);
 
-
         // TODO: handle gracefully
         self.web_socket.set(ws).unwrap();
 
         self.start_reader()?;
-
 
         Ok(())
     }

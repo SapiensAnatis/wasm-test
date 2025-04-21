@@ -1,14 +1,14 @@
 mod handshake;
-mod reader;
 mod invocation;
+mod reader;
 
 use futures::channel::mpsc::{self, Receiver};
+use futures::channel::oneshot::Sender;
 use futures::SinkExt;
 use serde::Serialize;
 use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
-use futures::channel::oneshot::Sender;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::MessageEvent;
 
@@ -20,16 +20,14 @@ use web_sys::WebSocket;
 
 const CHANNEL_BOUND_SIZE: usize = 64;
 
-
 type SubscriberMap = HashMap<String, Sender<SignalRMessage>>;
-
 
 pub struct SignalRConnection {
     url: String,
     web_socket: OnceCell<WebSocket>,
     on_message_closure: Option<Closure<dyn FnMut(MessageEvent)>>,
     invocation_id: u64,
-    invocation_subscribers: Rc<RefCell<SubscriberMap>>
+    invocation_subscribers: Rc<RefCell<SubscriberMap>>,
 }
 
 impl SignalRConnection {
@@ -96,7 +94,6 @@ impl SignalRConnection {
         Ok(receiver)
     }
 
-
     fn send_struct(ws: &WebSocket, message: &impl Serialize) -> Result<(), String> {
         let serialized = serde_json::to_string(message)
             .map(|mut s| {
@@ -117,4 +114,3 @@ impl Drop for SignalRConnection {
         }
     }
 }
-
