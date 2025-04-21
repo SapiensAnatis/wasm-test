@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, FormEvent } from 'react'
 import './App.css'
 
 
-import { ChatClient } from 'chat-client';
+import { ChatClient } from 'signalr-wasm';
 
 const client = new ChatClient("ws://localhost:5095/chatHub");
 

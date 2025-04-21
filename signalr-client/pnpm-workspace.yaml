@@ -1,5 +1,5 @@
 packages:
   - 'packages/app'
-  - 'packages/chat-client/pkg'
+  - 'packages/signalr-wasm/pkg'
 
   

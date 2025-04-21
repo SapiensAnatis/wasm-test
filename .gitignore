@@ -35,3 +35,4 @@ bld/
 [Ll]ogs/
 
 appsettings.Development.json
+.idea/
