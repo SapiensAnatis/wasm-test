@@ -4,7 +4,7 @@ mod invocation;
 
 use futures::channel::mpsc::{self, Receiver};
 use futures::SinkExt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -14,7 +14,7 @@ use web_sys::MessageEvent;
 
 use wasm_bindgen::prelude::*;
 
-use crate::message::{InvocationMessage, SignalRMessage};
+use crate::message::SignalRMessage;
 use wasm_bindgen::closure::Closure;
 use web_sys::WebSocket;
 

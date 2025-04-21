@@ -1,5 +1,5 @@
-use crate::connection::{SignalRConnection, SubscriberMap};
-use crate::message::{CompletionMessage, InvocationMessage, SignalRMessage};
+use crate::connection::SignalRConnection;
+use crate::message::{InvocationMessage, SignalRMessage};
 use futures::channel::oneshot;
 use web_sys::WebSocket;
 
@@ -17,7 +17,7 @@ impl SignalRConnection {
 
         let invocation = InvocationMessage::new(invocation_id_str, target, args);
 
-        Self::send_struct(&ws, &invocation)
+        Self::send_struct(ws, &invocation)
             .map_err(|e| format!("Failed to send message: {:?}", e))?;
 
         self.await_response(invocation.invocation_id).await?;
@@ -33,6 +33,8 @@ impl SignalRConnection {
                 .borrow_mut()
                 .insert(invocation_id, sender);
         }
+
+        console_log!("Waiting for response");;
 
         // TODO: consider timeout
         let message = receiver

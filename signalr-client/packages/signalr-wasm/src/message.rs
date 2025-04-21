@@ -30,6 +30,7 @@ impl CompletionMessage {
 #[serde(rename_all = "camelCase")]
 pub struct InvocationMessage {
     r#type: u64,
+    #[serde(skip_deserializing)] // asp.net doesn't send them in invocations to us for some reason?
     pub invocation_id: String,
     pub target: String,
     pub arguments: Vec<String>,

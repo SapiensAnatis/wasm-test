@@ -1,14 +1,6 @@
-use std::{cell::RefMut, collections::HashMap, rc::Rc};
 
-use futures::{
-    channel::oneshot::{self},
-    StreamExt,
-};
-use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::spawn_local;
 
-use crate::message::{CompletionMessage, SignalRMessage};
 use crate::connection::SignalRConnection;
 
 type OneshotSender<T> = futures::channel::oneshot::Sender<T>;

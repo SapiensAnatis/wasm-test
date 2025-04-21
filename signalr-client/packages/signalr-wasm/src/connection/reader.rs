@@ -43,11 +43,11 @@ impl SignalRConnection {
         message: CompletionMessage,
         mut subscribers: RefMut<SubscriberMap>,
     ) -> Result<(), String> {
-        let sender: Sender<SignalRMessage>;
+        
 
         // TODO: Removing here won't work for streaming invocations, it should be the invocation
         // caller who removes their own sender from the map.
-        sender = match subscribers.remove(&message.invocation_id) {
+        let sender: Sender<SignalRMessage> = match subscribers.remove(&message.invocation_id) {
             Some(s) => s,
             None => {
                 return Err(format!(

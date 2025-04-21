@@ -102,8 +102,12 @@ impl SignalRConnection {
         ws.set_onopen(None);
         ws.set_onmessage(None);
 
+
         // TODO: handle gracefully
         self.web_socket.set(ws).unwrap();
+
+        self.start_reader()?;
+
 
         Ok(())
     }
