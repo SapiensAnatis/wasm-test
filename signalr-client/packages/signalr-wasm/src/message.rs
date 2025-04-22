@@ -33,12 +33,12 @@ pub struct InvocationMessage {
     #[serde(skip_deserializing)] // asp.net doesn't send them in invocations to us for some reason?
     pub invocation_id: String,
     pub target: String,
-    pub arguments: Vec<String>,
+    pub arguments: Vec<Value>,
 }
 
 impl InvocationMessage {
     const TYPE: u64 = 1;
-    pub fn new(invocation_id: String, target: String, arguments: Vec<String>) -> Self {
+    pub fn new(invocation_id: String, target: String, arguments: Vec<Value>) -> Self {
         Self {
             r#type: InvocationMessage::TYPE,
             invocation_id,

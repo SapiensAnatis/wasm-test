@@ -1,9 +1,9 @@
 mod handshake;
-mod invocation;
 mod reader;
+mod receive_invocation;
+mod send_invocation;
 
-use futures::channel::mpsc::{self, Receiver};
-use futures::channel::oneshot::Sender;
+use futures::channel::mpsc::{self, Receiver, Sender};
 use futures::SinkExt;
 use serde::Serialize;
 use std::cell::{OnceCell, RefCell};
@@ -14,20 +14,22 @@ use web_sys::MessageEvent;
 
 use wasm_bindgen::prelude::*;
 
-use crate::message::SignalRMessage;
+use crate::message::{CompletionMessage, InvocationMessage};
 use wasm_bindgen::closure::Closure;
 use web_sys::WebSocket;
 
 const CHANNEL_BOUND_SIZE: usize = 64;
 
-type SubscriberMap = HashMap<String, Sender<SignalRMessage>>;
+type CompletionSubscriberMap = HashMap<String, Sender<CompletionMessage>>;
+type InvocationSubscriberMap = HashMap<String, Sender<InvocationMessage>>;
 
 pub struct SignalRConnection {
     url: String,
     web_socket: OnceCell<WebSocket>,
     on_message_closure: Option<Closure<dyn FnMut(MessageEvent)>>,
     invocation_id: u64,
-    invocation_subscribers: Rc<RefCell<SubscriberMap>>,
+    completion_subscribers: Rc<RefCell<CompletionSubscriberMap>>,
+    invocation_subscribers: Rc<RefCell<InvocationSubscriberMap>>,
 }
 
 impl SignalRConnection {
@@ -37,7 +39,8 @@ impl SignalRConnection {
             web_socket: OnceCell::new(),
             on_message_closure: None,
             invocation_id: 0,
-            invocation_subscribers: Rc::new(RefCell::new(SubscriberMap::new())),
+            completion_subscribers: Rc::new(RefCell::new(CompletionSubscriberMap::new())),
+            invocation_subscribers: Rc::new(RefCell::new(InvocationSubscriberMap::new())),
         }
     }
 

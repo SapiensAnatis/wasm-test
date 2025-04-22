@@ -1,6 +1,6 @@
-use crate::connection::{SignalRConnection, SubscriberMap};
-use crate::message::{CompletionMessage, SignalRMessage};
-use futures::channel::oneshot::Sender;
+use crate::connection::{CompletionSubscriberMap, InvocationSubscriberMap, SignalRConnection};
+use crate::message::{CompletionMessage, InvocationMessage, SignalRMessage};
+use futures::SinkExt;
 use futures::StreamExt;
 use std::cell::RefMut;
 use wasm_bindgen_futures::spawn_local;
@@ -10,7 +10,8 @@ impl SignalRConnection {
         console_log!("Starting read loop");
 
         let mut receiver = self.open_message_channel()?;
-        let subscribers_clone = self.invocation_subscribers.clone();
+        let cmp_subscribers_clone = self.completion_subscribers.clone();
+        let inv_subscribers_clone = self.invocation_subscribers.clone();
 
         spawn_local(async move {
             while let Some(message) = receiver.next().await {
@@ -18,12 +19,18 @@ impl SignalRConnection {
 
                 match serde_json::from_str(&message) {
                     Ok(SignalRMessage::Completion(m)) => {
-                        if let Err(e) = Self::handle_completion(m, subscribers_clone.borrow_mut()) {
+                        if let Err(e) =
+                            Self::handle_completion(m, cmp_subscribers_clone.borrow_mut()).await
+                        {
                             console_error!("{}", e);
                         }
                     }
-                    Ok(SignalRMessage::Invocation(_)) => {
-                        console_log!("Received invocation");
+                    Ok(SignalRMessage::Invocation(m)) => {
+                        if let Err(e) =
+                            Self::handle_invocation(m, inv_subscribers_clone.borrow_mut()).await
+                        {
+                            console_error!("{}", e);
+                        }
                     }
                     Ok(SignalRMessage::Ping) => {
                         console_log!("Pong!");
@@ -38,13 +45,11 @@ impl SignalRConnection {
         Ok(())
     }
 
-    pub(super) fn handle_completion(
+    pub(super) async fn handle_completion(
         message: CompletionMessage,
-        mut subscribers: RefMut<SubscriberMap>,
+        mut subscribers: RefMut<'_, CompletionSubscriberMap>,
     ) -> Result<(), String> {
-        // TODO: Removing here won't work for streaming invocations, it should be the invocation
-        // caller who removes their own sender from the map.
-        let sender: Sender<SignalRMessage> = match subscribers.remove(&message.invocation_id) {
+        let sender = match subscribers.get_mut(&message.invocation_id) {
             Some(s) => s,
             None => {
                 return Err(format!(
@@ -55,7 +60,29 @@ impl SignalRConnection {
         };
 
         sender
-            .send(SignalRMessage::Completion(message))
+            .send(message)
+            .await
+            .map_err(|_| "Failed to send subscriber message to subscriber".to_string())
+    }
+
+    pub(super) async fn handle_invocation(
+        message: InvocationMessage,
+        mut subscribers: RefMut<'_, InvocationSubscriberMap>,
+    ) -> Result<(), String> {
+        let sender = match subscribers.get_mut(&message.target) {
+            Some(s) => s,
+            None => {
+                console_log!(
+                    "No handler registered for invocation target {}",
+                    message.target
+                );
+                return Ok(());
+            }
+        };
+
+        sender
+            .send(message)
+            .await
             .map_err(|_| "Failed to send subscriber message to subscriber".to_string())
     }
 }
